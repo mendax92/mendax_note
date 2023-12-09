@@ -1,0 +1,27 @@
+# ActivityThread-activity启动流程
+
+https://blog.csdn.net/tianyl_melodie/article/details/53424116
+
+Activity的入口是onCreate方法。其实Android上一个应用的入口，应该是ActivityThread。和普通的Java类一样，入口是一个main方法
+
+ActivityThread（所在的线程）其实就是经常说的UI thread，也就是主线程
+
+①在应用启动的时候，首先会创建一个进程process，然后通过调用ActivityThread的main方法创建ActivityThread这个对象。
+
+②在ActivityThread的main方法中，会创建一个Looper和MessageQueue对象。
+
+③在创建完Looper和MessageQueue对象后，还会创建一个ApplicationThread对象，并且拿到ActivityManagerService的远程代理对象，实现和ActivityManagerService的通信。
+
+④创建一个H类的实例，而这个H类实际上是一个Handler对象。
+
+⑤调用Looper.loop()方法，开始轮询消息队列。
+
+⑥然后当要启动一个Activity的时候，通过ActivityManagerService通知ApplicationThreadNative，调用到onTransact方法。
+
+⑦在onTransact中进行判断，调用到对应的实现类ApplicationThread的scheduleLaunchActivity方法。
+
+⑧在scheduleLaunchActivity方法中，先创建对应的参数信息ActivityClientRecord，然后通过queueOrSendMessage发送消息。
+
+⑨Handler收到消息，在handleMessage中进行处理，在handleMessage中拿到对应的ActivityClientRecord进行，然后作为参数传入，并调用方法handleLaunchActivity方法。
+
+⑩在handleLaunchActivity中通过mInstrumentation调用对应的[生命周期](https://so.csdn.net/so/search?q=生命周期&spm=1001.2101.3001.7020)。 到此，我们对于Context的实现类，、ActivityThread的创建和Activity的生命周期的基本分析也算是告一段落了，当然，对于Activity生命周期的分析并没有完全结束。
