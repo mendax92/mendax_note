@@ -34,7 +34,7 @@ https://www.jianshu.com/p/ee5d3bb5ab90
 
 ​	 否:直接canvas绘制
 
-![image-20220717195227934](https://s2.loli.net/2022/07/17/9zdMtjmBUoWyn35.png)
+![image-20220717195227934](https://raw.githubusercontent.com/mendax92/pic/main/img/9zdMtjmBUoWyn35.png)
 
 实例代码
 
