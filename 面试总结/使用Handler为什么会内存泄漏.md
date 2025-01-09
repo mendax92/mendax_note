@@ -114,7 +114,7 @@ public final class Message implements Parcelable {
     ...
 }
 ```
-**总结**：handler 实例化之后会和Meaasge 关联，而非静态内部类handler 内部又隐式持有外部类的引用（activity）。上面例子message持有handler对象，这个handler对象又隐式持有着SampleActivity对象.直到消息被处理前，这个handler对象都不会被释放, 因此SampleActivity也不会被释放。注意，这个匿名Runnable类对象也一样。匿名类的非静态实例持有一个隐式的外部类引用,因此SampleActivity将被泄露。
+**总结**：handler 实例化之后会和Meaasge 关联，而非静态内部类handler 内部有隐式持有外部类的引用（activity）。上面例子message持有handler对象，这个handler对象又隐式持有着SampleActivity对象.直到消息被处理前，这个handler对象都不会被释放, 因此SampleActivity也不会被释放。注意，这个匿名Runnable类对象也一样。匿名类的非静态实例持有一个隐式的外部类引用,因此SampleActivity将被泄露。
 **解决方案**：
 1. 界面销毁的时候，将handler的消息给移除
 ```
