@@ -562,6 +562,25 @@ ActivityInfo resolveHomeActivity(int userId, Intent homeIntent) {
 
 obtainStarter() 方法返回的是 ActivityStarter 对象，它负责 Activity 的启动，一系列 setXXX() 方法传入启动所需的各种参数，最后的 execute() 是真正的启动逻辑。
 
+#### 应用进程启动原理
+
+- 什么时候触发的启动？谁发起的？
+
+> android没有提供进程启动的接口，所以进程的启动都是被动的，当我们启动一个组件的时候，如果发现组件的进程未启动，则会启动该进程，这个工作是 framework层去实现的，原理就是上面描述过的：通过 ActivityManagerService 中来调用 startProcessLocked() 开始进程的启动流程
+
+- 进程是谁启动的，怎么启动的。
+  进程怎么启动的，通过 ActivityManagerService 调用 startProcessLocked() 然后打开 socket , 发送参数列表，等待结果获取进程pid。ZygoteServer 会在 runSelectLoop中的 for循环 里面等待 socket 消息。
+
+  ![image-20250109104437758](https://raw.githubusercontent.com/mendax92/pic/main/image-20250109104437758.png)
+
+##### 应用进程是怎么启动的
+
+- 时机：启动组件时判断进程是否启动
+- 发起：由AMS通过 socket 发送给 Zygote 。
+- ZygoteConnection  在 processCommand方法中 通过 Zygote.forkAndSpecialize 创建进程，然后判断Pid = 0 中执行handleChildProc 函数，然后执行 ZygoteInit.childZygoteInit 执行 ActivityThread的main函数，类名是通过 AMS 发送 socket 发送到 Zygote
+- 进程启动后要报告到 AMS ，注册一下 ApplicationThread 进程启动才算结束，因为这样才能够启动各个组件
+  ![image-20250109112834328](https://raw.githubusercontent.com/mendax92/pic/main/image-20250109112834328.png)
+
 ###  总结
 
 所有的进程都由Zygote创建，zygote主要用来孵化`system_server进程`和`应用程序进程`。在孵化出第一个进程system_server后通过`runSelectLoop`等待并处理消息，分裂应用程序进程仍由system_server控制，`等待 AMS 给他发消息（告诉 zygote 创建进程）`，如app启动时创建子进程。
@@ -660,22 +679,3 @@ Activity在应用端由`ActivityClientRecord`负责描述其生命周期的过�
 ##### 10 为什么是 zygote 来创建进程，而不是通过 SystemServer 创建
 
 fork() 进程会复制父类进程到一个新的地址空间，zygote进程中只有一些应用启动必要的东西，相对来说zygote 所在的进程就是为了给其他应用更快速的复用系统数据并且更简单的环境。而 SystemServer 中启动了大量其他应用不需要的服务。所以用 zygote 更合适。
-
-##### 应用进程启动原理
-
-- 什么时候触发的启动？谁发起的？
-
-> android没有提供进程启动的接口，所以进程的启动都是被动的，当我们启动一个组件的时候，如果发现组件的进程未启动，则会启动该进程，这个工作是 framework层去实现的，原理就是上面描述过的：通过 ActivityManagerService 中来调用 startProcessLocked() 开始进程的启动流程
-
-- 进程是谁启动的，怎么启动的。
-  进程怎么启动的，通过 ActivityManagerService 调用 startProcessLocked() 然后打开 socket , 发送参数列表，等待结果获取进程pid。ZygoteServer 会在 runSelectLoop中的 for循环 里面等待 socket 消息。
-
-  ![image-20250109104437758](https://raw.githubusercontent.com/mendax92/pic/main/image-20250109104437758.png)
-
-##### 应用进程是怎么启动的
-
-- 时机：启动组件时判断进程是否启动
-- 发起：由AMS通过 socket 发送给 Zygote 。
-- ZygoteConnection  在 processCommand方法中 通过 Zygote.forkAndSpecialize 创建进程，然后判断Pid = 0 中执行handleChildProc 函数，然后执行 ZygoteInit.childZygoteInit 执行 ActivityThread的main函数，类名是通过 AMS 发送 socket 发送到 Zygote
-- 进程启动后要报告到 AMS ，注册一下 ApplicationThread 进程启动才算结束，因为这样才能够启动各个组件
-  ![image-20250109112834328](https://raw.githubusercontent.com/mendax92/pic/main/image-20250109112834328.png)
