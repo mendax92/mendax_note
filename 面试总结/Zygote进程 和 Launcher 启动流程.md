@@ -6,9 +6,11 @@
 >
 >[第3章 Zygote进程相关](https://blog.csdn.net/u010687761/article/details/131404918)
 >
->[安卓12homeActivity的启动流程--第一次启动的是fallbackhome](https://blog.csdn.net/m0_46857231/article/details/130636677)
+>[安卓12homeActivity的启动流程](https://blog.csdn.net/m0_46857231/article/details/130636677)
 >
 >[【Android】系统启动流程分析 —— Zygote 进程启动过程](https://blog.csdn.net/cnwutianhao/article/details/137050676)
+>
+>[Android13 zygoteServer runSelectLoop流程分析](https://blog.csdn.net/liuning1985622/article/details/138397523)
 
 [TOC]
 
@@ -199,10 +201,17 @@ static void preload(TimingsTraceLog bootTimingsTraceLog) {
 
 ###### 常用类
 
+> `preloadClasses()`方法主要是从/system/etc/preloaded-classes文件中读取需要预加载的类名，然后通过Class.forname将该类加载到内存中，并会执行其中的一些静态方法(Java的[类加载机制](https://so.csdn.net/so/search?q=类加载机制&spm=1001.2101.3001.7020))。这里的重点是preloaded-classes文件，这个文件一般使用Android原生的文件，其路径在frameworks/base/config/preloaded-classes
+
 - Android框架中的基础类，如Activity、Service、BroadcastReceiver等。
 - 常用的UI组件类，如TextView、Button、ImageView等。
 
 ###### 常用资源
+
+> 1.在Resources.startPreloading()方法中，调用updateConfiguration()方法为系统创建Configuration，这是后面应用和系统的一些配置来源。
+> 2.preloaded_drawables 预加载的drawables资源，并将其加载到内存中。preloaded_drawables字段在frameworks/base/core/res/res/values/arrays.xml。
+> 3.preloaded_color_state_lists 预加载的color资源，并将其加载到内存中，preloaded_color_state_lists字段也是定义在frameworks/base/core/res/res/values/arrays.xml。
+> 4.如果支持自由窗口模式，preloaded_freeform_multi_window_drawables字段中定义freeform drawables
 
 常用布局文件（layout）。
 常用图片资源（drawable）。
@@ -598,8 +607,6 @@ Zygote最开始是`app_process`，它是在 init 进程启动时被启动的，�
 
 ##### 4 Zygote为什么需要用到Socket通信而不是Binder
 
-Zygote是Android中的一个重要进程，它是启动应用程序进程的父进程。Zygote使用Socket来与应用程序进程进行通信，而不是使用Android中的IPC机制Binder，这是因为Socket和Binder有不同的优缺点，而在Zygote进程中使用Socket可以更好地满足Zygote进程的需求。
-
 1. `Zygote 用 binder 通信会导致死锁`
    假设 Zygote 使用 Binder 通信，因为 Binder 是支持多线程的，存在并发问题，而并发问题的解决方案就是加锁，如果进程 fork 是在多线程情况下运行，Binder 等待锁在锁机制下就可能会出现死锁。
 2. `Zygote 用 binder 通信会导致读写错误`
@@ -611,16 +618,21 @@ Zygote是Android中的一个重要进程，它是启动应用程序进程的父�
 
 **总之，Zygote进程使用Socket而不是Binder是基于其优点和需求而做出的选择。虽然Binder在Android中扮演着重要的角色，但在某些情况下，使用Socket可以提供更好的性能和更大的灵活性。再者，Binder当初并不成熟，团队成员对于进程间通讯更倾向于用Socket，后面为了做了很多优化，才使得Binder通讯变得成熟稳定。**
 
-##### 5 每个App都会将系统的资源，系统的类都加载一遍吗
+##### 5 Zygote采用binder调用的话该怎么做?
+
+1.zygote要启用binder机制，需要打开binder驱动，获得一个描述符，再通过mmap进行内存映射，还要注册binder线程，这还不够，还要创建一个binder对象注册到serviceManager，另外AMS要向zygote发起创建应用进程请求的话，要先从serviceManager查询zygote的binder对象，然后再发起binder调用，这来来回回好几趟非常繁琐，相比之下，zygote和SystemServer进程本来就是父子关系，对于简单的消息通信，用管道或者socket非常方便省事。
+
+2.如果zygote启用binder机制，再fork出SystemServer，那么SystemServer就会继承了zygote的描述符以及映射的内存，这两个进程在binder驱动层就会共用一套数据结构，这显然是不行的，所以还得先给原来的旧的描述符关掉，再重新启用一遍binder机制。
+
+##### 6 每个App都会将系统的资源，系统的类都加载一遍吗
 
 zygote进程的作用：
 1.创建一个Service端的Socket，开启一个ServerSocket实现和别的进程通信。
 2.加载系统类，系统资源。
 3.启动System Server进程
+4.Zygote进程预加载系统资源后，然后通过它孵化出其他的虚拟机进程，进而共享虚拟机内存和框架层资源`（共享内存）`，这样大幅度提高应用程序的启动和运行速度。
 
-**Zygote进程预加载系统资源后，然后通过它孵化出其他的虚拟机进程，进而共享虚拟机内存和框架层资源`（共享内存）`，这样大幅度提高应用程序的启动和运行速度。**
-
-##### 6 PMS 是干什么的，你是怎么理解PMS
+##### 7 PMS 是干什么的，你是怎么理解PMS
 
 **包管理，包解析，结果缓存，提供查询接口。**
 
@@ -628,7 +640,7 @@ zygote进程的作用：
 2. 解压`apk`文件
 3. dom解析`AndroidManifest.xml`文件。
 
-##### 7 为什么会有AMS AMS的作用
+##### 8 为什么会有AMS AMS的作用
 
 1. 查询PMS
 2. 反射生成对象
@@ -636,7 +648,7 @@ zygote进程的作用：
 
 AMS缓存中心：`ActivityThread`
 
-##### 8 AMS如何管理Activity，探探AMS的执行原理
+##### 9 AMS如何管理Activity，探探AMS的执行原理
 
 Activity在应用端由`ActivityClientRecord`负责描述其生命周期的过程与状态，但最终这些过程与状态是由`ActivityManagerService(以下简称AMS)`来管理和控制的
 
@@ -644,3 +656,26 @@ Activity在应用端由`ActivityClientRecord`负责描述其生命周期的过�
 2. `ServiceRecord`：描述了Service服务组件，由`ActiveServices`负责管理。
 3. `ContentProviderRecord`：描述ContentProvider内容提供者，由`ProviderMap`管理。
 4. `ActivityRecord`：用于描述Activity，由`ActivityStackSupervisor`进行管理。
+
+##### 10 为什么是 zygote 来创建进程，而不是通过 SystemServer 创建
+
+fork() 进程会复制父类进程到一个新的地址空间，zygote进程中只有一些应用启动必要的东西，相对来说zygote 所在的进程就是为了给其他应用更快速的复用系统数据并且更简单的环境。而 SystemServer 中启动了大量其他应用不需要的服务。所以用 zygote 更合适。
+
+##### 应用进程启动原理
+
+- 什么时候触发的启动？谁发起的？
+
+> android没有提供进程启动的接口，所以进程的启动都是被动的，当我们启动一个组件的时候，如果发现组件的进程未启动，则会启动该进程，这个工作是 framework层去实现的，原理就是上面描述过的：通过 ActivityManagerService 中来调用 startProcessLocked() 开始进程的启动流程
+
+- 进程是谁启动的，怎么启动的。
+  进程怎么启动的，通过 ActivityManagerService 调用 startProcessLocked() 然后打开 socket , 发送参数列表，等待结果获取进程pid。ZygoteServer 会在 runSelectLoop中的 for循环 里面等待 socket 消息。
+
+  ![image-20250109104437758](https://raw.githubusercontent.com/mendax92/pic/main/image-20250109104437758.png)
+
+##### 应用进程是怎么启动的
+
+- 时机：启动组件时判断进程是否启动
+- 发起：由AMS通过 socket 发送给 Zygote 。
+- ZygoteConnection  在 processCommand方法中 通过 Zygote.forkAndSpecialize 创建进程，然后判断Pid = 0 中执行handleChildProc 函数，然后执行 ZygoteInit.childZygoteInit 执行 ActivityThread的main函数，类名是通过 AMS 发送 socket 发送到 Zygote
+- 进程启动后要报告到 AMS ，注册一下 ApplicationThread 进程启动才算结束，因为这样才能够启动各个组件
+  ![image-20250109112834328](https://raw.githubusercontent.com/mendax92/pic/main/image-20250109112834328.png)
