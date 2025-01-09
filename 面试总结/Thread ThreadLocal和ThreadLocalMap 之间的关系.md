@@ -1,4 +1,3 @@
-### Thread ThreadLocal和ThreadLocalMap 之间的关系
 >来源：[Thread ThreadLocal和ThreadLocalMap，用法+原理，我懵圈了？](https://blog.csdn.net/u011583316/article/details/107129450)
 >
 ### 内部结构图
