@@ -1,4 +1,3 @@
-### 使用Handler为什么会内存泄漏
 >来源：[Android 非静态内部类导致的内存泄露（非static内部类）](https://www.jianshu.com/p/6a362ea4dfd8)
 >
 
